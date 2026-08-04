@@ -1,0 +1,81 @@
+Project Architecture :
+
+library-management/
+
+│
+├── frontend/
+│
+├── backend/
+│
+├── database/
+│
+├── docker/
+│
+├── docs/
+│
+├── .github/workflows/
+│
+├── docker-compose.yml
+│
+├── README.md
+│
+└── .gitignore
+
+DB table:
+
+Users
+
+id
+name
+email
+password
+role
+
+Books
+
+id
+title
+author
+isbn
+quantity
+
+BorrowedBooks
+
+id
+userId
+bookId
+borrowDate
+returnDate
+status
+
+DevOps Architecture
+
+Laptop
+
+↓
+
+Git
+
+↓
+
+GitHub
+
+↓
+
+GitHub Actions
+
+↓
+
+AWS EC2
+
+↓
+
+Docker
+
+↓
+
+Node App
+
+↓
+
+MySQL
