@@ -1,8 +1,6 @@
-# PostgreSQL setup prompts
+# PostgreSQL setup (schema v2)
 
-Use these prompts/commands to create and wire the database.
-
-## 1. Create database (psql)
+## 1. Create + load
 
 ```bash
 psql -U postgres
@@ -15,50 +13,54 @@ CREATE DATABASE shelfmark;
 \i database/seed.sql
 ```
 
+From project root (Windows path example):
+
+```bash
+psql -U postgres -d shelfmark -f database/schema.sql
+psql -U postgres -d shelfmark -f database/seed.sql
+```
+
 ## 2. Connection string
 
 ```
 DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/shelfmark
 ```
 
-## 3. Prompt for an AI / teammate implementing the backend
+## 3. Seed logins
 
-```
-Build a Node.js Express API for Shelfmark library management using PostgreSQL.
+| Role       | Email                     | Password      |
+|------------|---------------------------|---------------|
+| admin      | admin@shelfmark.local     | admin123      |
+| librarian  | librarian@shelfmark.local | librarian123  |
+| member     | priya@shelfmark.local     | member123     |
 
-Use the schema in database/schema.sql with tables:
-- users (id uuid, name, email unique, password_hash, role enum admin|member)
-- books (id uuid, title, author, isbn unique, category, description, quantity, available)
-- borrowed_books (id uuid, user_id, book_id, borrow_date, due_date, return_date, status)
+## 4. Important column names (v2)
 
-Rules:
-1. Hash passwords with bcrypt.
-2. JWT auth: members access own loans; admins manage books/users/all loans.
-3. Borrowing must decrement books.available in a transaction and reject if available = 0.
-4. Returning must increment books.available and set status=returned + return_date.
-5. Due date default = borrow_date + 14 days.
-6. Mark status overdue when due_date < today and still borrowed (cron or on read).
-7. Follow the endpoint list in docs/API.md.
-8. Validate input; return consistent JSON { data, error, message }.
-```
+`users` uses:
+- `full_name` (not `name`)
+- `role_id` → `roles.id` (not `role` text)
 
-## 4. Useful verification queries
+`books` has no `author`, `quantity`, or `available`.
+Use `book_authors` + `book_copies` / view `book_availability`.
+
+## 5. Quick checks
 
 ```sql
--- Inventory health
-SELECT title, quantity, available FROM books ORDER BY title;
+SELECT u.full_name, r.code AS role, u.email
+FROM users u
+JOIN roles r ON r.id = u.role_id;
 
--- Active loans
-SELECT u.name, b.title, bb.borrow_date, bb.due_date, bb.status
-FROM borrowed_books bb
-JOIN users u ON u.id = bb.user_id
-JOIN books b ON b.id = bb.book_id
-WHERE bb.status = 'borrowed';
+SELECT b.title, a.full_name AS author, ba.available_copies
+FROM books b
+JOIN book_authors x ON x.book_id = b.id
+JOIN authors a ON a.id = x.author_id
+JOIN book_availability ba ON ba.book_id = b.id
+ORDER BY b.title;
 
--- Overdue
-SELECT u.email, b.title, bb.due_date
-FROM borrowed_books bb
-JOIN users u ON u.id = bb.user_id
-JOIN books b ON b.id = bb.book_id
-WHERE bb.status = 'borrowed' AND bb.due_date < CURRENT_DATE;
+SELECT m.membership_number, u.full_name, bk.title, l.status, l.due_at
+FROM loans l
+JOIN members m ON m.id = l.member_id
+JOIN users u ON u.id = m.user_id
+JOIN book_copies c ON c.id = l.copy_id
+JOIN books bk ON bk.id = c.book_id;
 ```
