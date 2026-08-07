@@ -1,81 +1,40 @@
-Project Architecture :
+# Shelfmark — Library Management System
 
-library-management/
+React frontend + Node/Express API + PostgreSQL (PGlite locally).
 
-│
-├── frontend/
-│
-├── backend/
-│
-├── database/
-│
-├── docker/
-│
-├── docs/
-│
-├── .github/workflows/
-│
-├── docker-compose.yml
-│
-├── README.md
-│
-└── .gitignore
+## Run
 
-DB table:
+### Backend
+```bash
+cd backend
+npm install
+npm run dev
+```
+API: `http://localhost:5000/api`
 
-Users
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+App: `http://localhost:5173`
 
-id
-name
-email
-password
-role
+### Seed logins
+| Role   | Email                   | Password  |
+|--------|-------------------------|-----------|
+| Member | priya@shelfmark.local   | member123 |
+| Admin  | admin@shelfmark.local   | admin123  |
 
-Books
+## Database
 
-id
-title
-author
-isbn
-quantity
+- Default: embedded **PGlite** (Postgres-compatible) in `backend/data/`
+- Optional real Postgres: set `DATABASE_URL` in `backend/.env`
 
-BorrowedBooks
+Schema: `database/schema.sql` · API docs: `docs/API.md` · Workflow: `docs/WORKFLOW.md`
 
-id
-userId
-bookId
-borrowDate
-returnDate
-status
+## API base
 
-DevOps Architecture
+`http://localhost:5000/api`
 
-Laptop
-
-↓
-
-Git
-
-↓
-
-GitHub
-
-↓
-
-GitHub Actions
-
-↓
-
-AWS EC2
-
-↓
-
-Docker
-
-↓
-
-Node App
-
-↓
-
-MySQL
+Auth · Users · Books · Borrows · Stats — see `docs/API.md`
