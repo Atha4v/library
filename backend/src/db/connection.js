@@ -8,7 +8,31 @@ let mode = 'pglite'
 
 async function createPostgresDriver(databaseUrl) {
   const { Pool } = require('pg')
-  const pool = new Pool({ connectionString: databaseUrl })
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    // Fail fast instead of hanging when credentials/host are wrong
+    connectionTimeoutMillis: 5000,
+  })
+
+  // Verify credentials immediately
+  try {
+    await pool.query('SELECT 1')
+  } catch (err) {
+    await pool.end().catch(() => {})
+    if (err.code === '28P01') {
+      throw new Error(
+        'Postgres password authentication failed. Check DATABASE_URL in backend/.env ' +
+          '(user/password), or leave DATABASE_URL empty to use local PGlite.',
+      )
+    }
+    if (err.code === 'ECONNREFUSED') {
+      throw new Error(
+        'Could not connect to Postgres at DATABASE_URL. Is Postgres running? ' +
+          'Or leave DATABASE_URL empty to use local PGlite.',
+      )
+    }
+    throw err
+  }
 
   return {
     query: (text, params) => pool.query(text, params),
@@ -75,17 +99,20 @@ async function createPgliteDriver(dataDir) {
 
 async function connectDb() {
   if (config.db.databaseUrl) {
+    // External Postgres — assume schema already applied (database/schema.sql)
     driver = await createPostgresDriver(config.db.databaseUrl)
     mode = 'postgres'
+    console.log('Connected to PostgreSQL via DATABASE_URL')
   } else {
+    // Local embedded DB for the current API (v1 tables in src/sql)
     driver = await createPgliteDriver(config.db.dataDir)
     mode = 'pglite'
+    const schemaPath = path.join(config.sqlDir, 'schema.sql')
+    const schema = fs.readFileSync(schemaPath, 'utf8')
+    await driver.exec(schema)
+    await seedIfEmpty(driver)
+    console.log(`Using embedded PGlite at ${config.db.dataDir}`)
   }
-
-  const schemaPath = path.join(config.sqlDir, 'schema.sql')
-  const schema = fs.readFileSync(schemaPath, 'utf8')
-  await driver.exec(schema)
-  await seedIfEmpty(driver)
 
   return { mode }
 }
