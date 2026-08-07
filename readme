@@ -2,6 +2,24 @@
 
 React frontend + Node/Express API + PostgreSQL (PGlite locally).
 
+## Backend structure
+
+```text
+backend/
+├── server.js                 # entry point
+├── .env
+└── src/
+    ├── app.js                # Express app + middleware
+    ├── config/               # env / app config
+    ├── db/                   # DB connection (PGlite or Postgres)
+    ├── sql/                  # schema.sql + seed
+    ├── routes/               # HTTP route definitions
+    ├── controllers/          # request/response handlers
+    ├── services/             # business logic
+    ├── middleware/           # auth + error handlers
+    └── utils/                # helpers (response, mappers, ids)
+```
+
 ## Run
 
 ### Backend
@@ -18,7 +36,8 @@ cd frontend
 npm install
 npm run dev
 ```
-App: `http://localhost:5173`
+App: `http://localhost:5173`  
+Vite proxies `/api` → `http://localhost:5000`.
 
 ### Seed logins
 | Role   | Email                   | Password  |
@@ -28,13 +47,11 @@ App: `http://localhost:5173`
 
 ## Database
 
-- Default: embedded **PGlite** (Postgres-compatible) in `backend/data/`
-- Optional real Postgres: set `DATABASE_URL` in `backend/.env`
+- Default: embedded **PGlite** in `backend/data/`
+- Real Postgres: set `DATABASE_URL` in `backend/.env`
 
-Schema: `database/schema.sql` · API docs: `docs/API.md` · Workflow: `docs/WORKFLOW.md`
+## Docs
 
-## API base
-
-`http://localhost:5000/api`
-
-Auth · Users · Books · Borrows · Stats — see `docs/API.md`
+- API: `docs/API.md`
+- Workflow: `docs/WORKFLOW.md`
+- Schema: `database/schema.sql` (and `backend/src/sql/schema.sql`)

@@ -5,7 +5,9 @@ function notFound(_req, res) {
 }
 
 function errorHandler(err, _req, res, _next) {
-  console.error(err)
+  if (process.env.NODE_ENV !== 'test') {
+    console.error(err)
+  }
 
   if (err.code === '23505') {
     return fail(res, 409, 'Duplicate value', 'CONFLICT')
@@ -14,7 +16,12 @@ function errorHandler(err, _req, res, _next) {
     return fail(res, 400, 'Related record not found', 'FK_VIOLATION')
   }
 
-  return fail(res, err.status || 500, err.message || 'Server error', err.code || 'SERVER_ERROR')
+  return fail(
+    res,
+    err.status || 500,
+    err.message || 'Server error',
+    err.code || 'SERVER_ERROR',
+  )
 }
 
 module.exports = { notFound, errorHandler }
