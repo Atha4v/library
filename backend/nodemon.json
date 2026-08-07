@@ -1,5 +1,6 @@
 {
-  "watch": ["server.js", "src"],
-  "ignore": ["data/**", "node_modules/**"],
-  "ext": "js,json,sql"
+  "watch": ["server.ts", "src"],
+  "ignore": ["data/**", "node_modules/**", "dist/**"],
+  "ext": "ts,json,sql",
+  "exec": "tsx server.ts"
 }

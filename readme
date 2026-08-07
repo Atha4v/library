@@ -1,42 +1,42 @@
 # Shelfmark — Library Management System
 
-React frontend + Node/Express API + PostgreSQL (PGlite locally).
+React + TypeScript frontend · Node + TypeScript API · PostgreSQL (PGlite locally).
 
 ## Backend structure
 
 ```text
 backend/
-├── server.js                 # entry point
+├── server.ts                 # entry point
 ├── .env
 └── src/
-    ├── app.js                # Express app + middleware
-    ├── config/               # env / app config
-    ├── db/                   # DB connection (PGlite or Postgres)
-    ├── sql/                  # schema.sql + seed
-    ├── routes/               # HTTP route definitions
-    ├── controllers/          # request/response handlers
-    ├── services/             # business logic
-    ├── middleware/           # auth + error handlers
-    └── utils/                # helpers (response, mappers, ids)
+    ├── app.ts
+    ├── config/
+    ├── db/
+    ├── sql/
+    ├── routes/
+    ├── controllers/
+    ├── services/
+    ├── middleware/
+    ├── types/
+    └── utils/
 ```
 
 ## Run
 
-### Backend
+### Backend (port 5000)
 ```bash
 cd backend
 npm install
 npm run dev
 ```
-API: `http://localhost:5000/api`
 
-### Frontend
+### Frontend (port 3000)
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-App: `http://localhost:5173`  
+
 Vite proxies `/api` → `http://localhost:5000`.
 
 ### Seed logins
@@ -54,4 +54,4 @@ Vite proxies `/api` → `http://localhost:5000`.
 
 - API: `docs/API.md`
 - Workflow: `docs/WORKFLOW.md`
-- Schema: `database/schema.sql` (and `backend/src/sql/schema.sql`)
+- Schema: `database/schema.sql`

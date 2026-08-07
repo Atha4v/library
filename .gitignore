@@ -8,3 +8,4 @@
 /frontend/.env
 /backend/build
 /backend/dist
+*.tsbuildinfo
