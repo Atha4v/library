@@ -73,18 +73,26 @@ export interface AuthPayload {
 
 export interface BookPayload {
   title?: string
-  author?: string
-  isbn?: string
-  category?: string
+  subtitle?: string
+  isbn13?: string
+  isbn10?: string
+  publisherId?: string
+  publishedYear?: number
+  edition?: string
+  languageCode?: string
+  pageCount?: number
   description?: string
-  quantity?: number | string
-  available?: number | string
+  coverUrl?: string
   coverColor?: string
+  deweyCode?: string
+  isActive?: boolean
+  authorIds?: string[]      // UUIDs from authors table
+  categoryIds?: string[]    // UUIDs from categories table
 }
 
 export interface BookListQuery {
   q?: string
-  category?: string
+  category?: string        // category SLUG, not name
   page?: string
   limit?: string
 }

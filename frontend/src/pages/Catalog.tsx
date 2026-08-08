@@ -3,11 +3,16 @@ import BookTile from '../components/BookTile'
 import { booksApi } from '../api/client'
 import type { Book } from '../types'
 
+interface CategoryOption {
+  slug: string
+  name: string
+}
+
 export default function Catalog() {
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
   const [books, setBooks] = useState<Book[]>([])
-  const [categories, setCategories] = useState<string[]>(['all'])
+  const [categories, setCategories] = useState<CategoryOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -18,7 +23,7 @@ export default function Catalog() {
         .list({ q: query, category })
         .then((res) => {
           setBooks(res.data.items || [])
-          setCategories(['all', ...(res.data.categories || [])])
+          setCategories(res.data.categories || [])
           setError('')
         })
         .catch((err: unknown) => {
@@ -50,9 +55,10 @@ export default function Catalog() {
           value={category}
           onChange={(e) => setCategory(e.target.value)}
         >
+          <option value="all">All categories</option>
           {categories.map((c) => (
-            <option key={c} value={c}>
-              {c === 'all' ? 'All categories' : c}
+            <option key={c.slug} value={c.slug}>
+              {c.name}
             </option>
           ))}
         </select>

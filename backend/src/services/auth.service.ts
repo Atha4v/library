@@ -58,7 +58,7 @@ export async function login({ email, password }: AuthPayload) {
     created_at: Date
     updated_at: Date
   }>(
-    `SELECT id, name, email, role, password_hash, created_at, updated_at
+    `SELECT id, full_name, email, role_id, password_hash, created_at, updated_at
      FROM users WHERE email = $1`,
     [email.toLowerCase().trim()],
   )

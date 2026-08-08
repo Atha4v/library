@@ -8,6 +8,8 @@ export async function register(req: Request, res: Response) {
 }
 
 export async function login(req: Request, res: Response) {
+  // debugging
+  console.log('Login request body:', req.body) // Log the request body for debugging
   const data = await authService.login(req.body)
   return ok(res, data, 'Logged in successfully')
 }
