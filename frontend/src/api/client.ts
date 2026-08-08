@@ -5,6 +5,7 @@ import type {
   BookCreatePayload,
   BookListData,
   Loan,
+  LoginPayload,
   MemberStats,
   OverviewStats,
   RegisterPayload,
@@ -63,23 +64,38 @@ export async function api<T = unknown>(
   return body
 }
 
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
 export const authApi = {
-  login: (email: string, password: string) =>
+  /** Login with email + password */
+  login: (payload: LoginPayload) =>
     api<AuthPayload>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(payload),
     }),
+
+  /** Register — sends fullName (maps to users.full_name) */
   register: (payload: RegisterPayload) =>
     api<AuthPayload>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+
+  /** Fetch the current authenticated user */
   me: () => api<User>('/auth/me'),
 }
 
+// ---------------------------------------------------------------------------
+// Books
+// ---------------------------------------------------------------------------
+
 export interface BookListParams {
   q?: string
-  category?: string
+  category?: string   // category slug
+  page?: number
+  limit?: number
 }
 
 export const booksApi = {
@@ -87,33 +103,64 @@ export const booksApi = {
     const qs = new URLSearchParams()
     if (params.q) qs.set('q', params.q)
     if (params.category && params.category !== 'all') qs.set('category', params.category)
+    if (params.page) qs.set('page', String(params.page))
+    if (params.limit) qs.set('limit', String(params.limit))
     const query = qs.toString()
     return api<BookListData>(`/books${query ? `?${query}` : ''}`)
   },
-  get: (id: string | number) => api<Book>(`/books/${id}`),
+
+  get: (id: string) => api<Book>(`/books/${id}`),
+
   create: (payload: BookCreatePayload) =>
     api<Book>('/books', { method: 'POST', body: JSON.stringify(payload) }),
-  update: (id: string | number, payload: Partial<BookCreatePayload>) =>
+
+  update: (id: string, payload: Partial<BookCreatePayload>) =>
     api<Book>(`/books/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
-  remove: (id: string | number) =>
+
+  remove: (id: string) =>
     api(`/books/${id}`, { method: 'DELETE' }),
 }
 
+// ---------------------------------------------------------------------------
+// Borrows / Loans
+// ---------------------------------------------------------------------------
+
 export const borrowsApi = {
-  create: (bookId: number) =>
+  /** Borrow a book — sends bookId (UUID string) */
+  create: (bookId: string) =>
     api<Loan>('/borrows', { method: 'POST', body: JSON.stringify({ bookId }) }),
+
+  /** My loan history */
   mine: () => api<Loan[]>('/borrows/me'),
+
+  /** All loans (admin/librarian) — optionally filtered by status */
   all: (status?: string) =>
     api<Loan[]>(`/borrows${status ? `?status=${encodeURIComponent(status)}` : ''}`),
-  returnLoan: (id: number) => api(`/borrows/${id}/return`, { method: 'POST' }),
-  renew: (id: number) => api(`/borrows/${id}/renew`, { method: 'POST' }),
+
+  /** Return a loan */
+  returnLoan: (id: string) => api(`/borrows/${id}/return`, { method: 'POST' }),
+
+  /** Renew a loan */
+  renew: (id: string) => api(`/borrows/${id}/renew`, { method: 'POST' }),
 }
+
+// ---------------------------------------------------------------------------
+// Stats
+// ---------------------------------------------------------------------------
 
 export const statsApi = {
   overview: () => api<OverviewStats>('/stats/overview'),
   me: () => api<MemberStats>('/stats/me'),
 }
 
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+
 export const usersApi = {
   list: () => api<User[]>('/users'),
+  getById: (id: string) => api<User>(`/users/${id}`),
+  update: (id: string, payload: { fullName?: string; role?: string }) =>
+    api<User>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  remove: (id: string) => api(`/users/${id}`, { method: 'DELETE' }),
 }

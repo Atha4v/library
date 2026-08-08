@@ -4,67 +4,129 @@ import { newId } from '../utils/id'
 import { AppError } from '../utils/errors'
 import type { DbDriver, User } from '../types'
 
+// ---------------------------------------------------------------------------
+// Shared JOIN SELECT
+// loans → book_copies → books → authors
+// loans → members → users
+// ---------------------------------------------------------------------------
+
 const LOAN_SELECT = `
-  SELECT bb.*,
-         b.title AS book_title,
-         b.author AS book_author,
-         b.cover_color AS book_cover_color,
-         u.name AS user_name,
-         u.email AS user_email
-  FROM borrowed_books bb
-  JOIN books b ON b.id = bb.book_id
-  JOIN users u ON u.id = bb.user_id
+  SELECT
+    l.*,
+    bc.book_id,
+    b.title        AS book_title,
+    b.cover_color  AS book_cover_color,
+    b.isbn_13      AS book_isbn_13,
+    b.isbn_10      AS book_isbn_10,
+    STRING_AGG(DISTINCT a.full_name, ', ' ORDER BY a.full_name) AS book_authors_text,
+    l.member_id,
+    m.membership_number,
+    u.id           AS member_user_id,
+    u.full_name    AS member_full_name,
+    u.email        AS member_email
+  FROM loans l
+  JOIN book_copies bc    ON bc.id    = l.copy_id
+  JOIN books b           ON b.id     = bc.book_id
+  LEFT JOIN book_authors ba ON ba.book_id = b.id
+  LEFT JOIN authors a    ON a.id     = ba.author_id
+  JOIN members m         ON m.id     = l.member_id
+  JOIN users u           ON u.id     = m.user_id
 `
+const LOAN_GROUP = `
+  GROUP BY l.id, bc.book_id, b.title, b.cover_color, b.isbn_13, b.isbn_10,
+           l.member_id, m.membership_number, u.id, u.full_name, u.email
+`
+
+// ---------------------------------------------------------------------------
+// Mark overdue loans (called before any list query)
+// ---------------------------------------------------------------------------
 
 async function markOverdue(db: DbDriver = getDb()) {
   await db.query(
-    `UPDATE borrowed_books
+    `UPDATE loans
      SET status = 'overdue', updated_at = NOW()
-     WHERE status = 'borrowed' AND due_date < CURRENT_DATE`,
+     WHERE status = 'active' AND due_at < NOW()`,
   )
 }
+
+// ---------------------------------------------------------------------------
+// Resolve user_id → member_id
+// ---------------------------------------------------------------------------
+
+async function getMemberId(userId: string): Promise<string> {
+  const db = getDb()
+  const result = await db.query<{ id: string }>(
+    `SELECT id FROM members WHERE user_id = $1`,
+    [userId],
+  )
+  if (!result.rows[0]) {
+    throw new AppError('Member profile not found for this user', 404, 'MEMBER_NOT_FOUND')
+  }
+  return result.rows[0].id
+}
+
+// ---------------------------------------------------------------------------
+// borrowBook
+// ---------------------------------------------------------------------------
 
 export async function borrowBook(userId: string, bookId?: string) {
   if (!bookId) throw new AppError('bookId is required', 400, 'VALIDATION')
 
   const db = getDb()
+  const memberId = await getMemberId(userId)
+
   const loan = await db.transaction(async (tx) => {
-    const bookRes = await tx.query<{ available: number }>(
-      'SELECT * FROM books WHERE id = $1 FOR UPDATE',
+    // Lock an available copy of this book
+    const copyRes = await tx.query<{ id: string; branch_id: string }>(
+      `SELECT id, branch_id FROM book_copies
+       WHERE book_id = $1 AND status = 'available'
+       LIMIT 1
+       FOR UPDATE SKIP LOCKED`,
       [bookId],
     )
-    const book = bookRes.rows[0]
-    if (!book) throw new AppError('Book not found', 404, 'NOT_FOUND')
-    if (book.available < 1) throw new AppError('No copies available', 400, 'OUT_OF_STOCK')
+    const copy = copyRes.rows[0]
+    if (!copy) throw new AppError('No copies available', 400, 'OUT_OF_STOCK')
 
+    // Check member has no active loan for this book (any copy)
     const existing = await tx.query(
-      `SELECT id FROM borrowed_books
-       WHERE user_id = $1 AND book_id = $2 AND status IN ('borrowed', 'overdue')
+      `SELECT l.id FROM loans l
+       JOIN book_copies bc ON bc.id = l.copy_id
+       WHERE bc.book_id = $1 AND l.member_id = $2
+         AND l.status IN ('active', 'overdue')
        LIMIT 1`,
-      [userId, bookId],
+      [bookId, memberId],
     )
     if (existing.rows[0]) {
       throw new AppError('You already have an active loan for this book', 400, 'ALREADY_BORROWED')
     }
 
+    // Mark copy as on_loan
     await tx.query(
-      'UPDATE books SET available = available - 1, updated_at = NOW() WHERE id = $1',
-      [bookId],
+      `UPDATE book_copies SET status = 'on_loan', updated_at = NOW() WHERE id = $1`,
+      [copy.id],
     )
 
-    const insert = await tx.query<{ id: string }>(
-      `INSERT INTO borrowed_books (id, user_id, book_id, borrow_date, due_date, status)
-       VALUES ($1, $2, $3, CURRENT_DATE, CURRENT_DATE + INTERVAL '14 days', 'borrowed')
-       RETURNING id`,
-      [newId(), userId, bookId],
+    // Create loan (due_at = now + 14 days)
+    const loanId = newId()
+    await tx.query(
+      `INSERT INTO loans (id, copy_id, member_id, branch_id, borrowed_at, due_at, issued_by)
+       VALUES ($1, $2, $3, $4, NOW(), NOW() + INTERVAL '14 days', $5)`,
+      [loanId, copy.id, memberId, copy.branch_id, userId],
     )
 
-    const full = await tx.query(`${LOAN_SELECT} WHERE bb.id = $1`, [insert.rows[0].id])
+    const full = await tx.query(
+      `${LOAN_SELECT} WHERE l.id = $1 ${LOAN_GROUP}`,
+      [loanId],
+    )
     return full.rows[0]
   })
 
   return mapBorrow(loan)!
 }
+
+// ---------------------------------------------------------------------------
+// listAllLoans — admin/librarian
+// ---------------------------------------------------------------------------
 
 export async function listAllLoans(status?: string) {
   const db = getDb()
@@ -74,108 +136,157 @@ export async function listAllLoans(status?: string) {
   let where = ''
   if (status) {
     params.push(status)
-    where = 'WHERE bb.status = $1'
+    where = `WHERE l.status = $1`
   }
 
   const result = await db.query(
-    `${LOAN_SELECT} ${where} ORDER BY bb.borrow_date DESC`,
+    `${LOAN_SELECT} ${where} ${LOAN_GROUP} ORDER BY l.borrowed_at DESC`,
     params,
   )
   return result.rows.map((row) => mapBorrow(row)!)
 }
 
+// ---------------------------------------------------------------------------
+// listMyLoans — current member
+// ---------------------------------------------------------------------------
+
 export async function listMyLoans(userId: string) {
   const db = getDb()
   await markOverdue(db)
+  const memberId = await getMemberId(userId)
+
   const result = await db.query(
-    `${LOAN_SELECT} WHERE bb.user_id = $1 ORDER BY bb.borrow_date DESC`,
-    [userId],
+    `${LOAN_SELECT} WHERE l.member_id = $1 ${LOAN_GROUP} ORDER BY l.borrowed_at DESC`,
+    [memberId],
   )
   return result.rows.map((row) => mapBorrow(row)!)
 }
+
+// ---------------------------------------------------------------------------
+// listOverdue
+// ---------------------------------------------------------------------------
 
 export async function listOverdue() {
   const db = getDb()
   await markOverdue(db)
   const result = await db.query(
     `${LOAN_SELECT}
-     WHERE bb.status = 'overdue' OR (bb.status = 'borrowed' AND bb.due_date < CURRENT_DATE)
-     ORDER BY bb.due_date ASC`,
+     WHERE l.status = 'overdue'
+     ${LOAN_GROUP}
+     ORDER BY l.due_at ASC`,
   )
   return result.rows.map((row) => mapBorrow(row)!)
 }
 
+// ---------------------------------------------------------------------------
+// getLoanById
+// ---------------------------------------------------------------------------
+
 export async function getLoanById(id: string, user: User) {
   const db = getDb()
-  const result = await db.query(`${LOAN_SELECT} WHERE bb.id = $1`, [id])
-  const loan = result.rows[0] as Record<string, unknown> | undefined
-  if (!loan) throw new AppError('Loan not found', 404, 'NOT_FOUND')
-  if (user.role !== 'admin' && loan.user_id !== user.id) {
-    throw new AppError('Not allowed', 403, 'FORBIDDEN')
+  const result = await db.query(
+    `${LOAN_SELECT} WHERE l.id = $1 ${LOAN_GROUP}`,
+    [id],
+  )
+  const row = result.rows[0] as Record<string, unknown> | undefined
+  if (!row) throw new AppError('Loan not found', 404, 'NOT_FOUND')
+
+  // Member can only see their own loan
+  if (user.role === 'member') {
+    const memberId = await getMemberId(user.id)
+    if (row.member_id !== memberId) {
+      throw new AppError('Not allowed', 403, 'FORBIDDEN')
+    }
   }
-  return mapBorrow(loan)!
+
+  return mapBorrow(row)!
 }
+
+// ---------------------------------------------------------------------------
+// returnLoan
+// ---------------------------------------------------------------------------
 
 export async function returnLoan(id: string, user: User) {
   const db = getDb()
+
   const loan = await db.transaction(async (tx) => {
     const current = await tx.query<{
-      user_id: string
+      member_id: string
       status: string
-      book_id: string
-    }>('SELECT * FROM borrowed_books WHERE id = $1 FOR UPDATE', [id])
+      copy_id: string
+    }>('SELECT member_id, status, copy_id FROM loans WHERE id = $1 FOR UPDATE', [id])
     const row = current.rows[0]
     if (!row) throw new AppError('Loan not found', 404, 'NOT_FOUND')
-    if (user.role !== 'admin' && row.user_id !== user.id) {
-      throw new AppError('Not allowed', 403, 'FORBIDDEN')
+
+    if (user.role === 'member') {
+      const memberId = await getMemberId(user.id)
+      if (row.member_id !== memberId) throw new AppError('Not allowed', 403, 'FORBIDDEN')
     }
     if (row.status === 'returned') {
       throw new AppError('Loan already returned', 400, 'ALREADY_RETURNED')
     }
 
     await tx.query(
-      `UPDATE borrowed_books
-       SET status = 'returned', return_date = CURRENT_DATE, updated_at = NOW()
-       WHERE id = $1`,
-      [id],
-    )
-    await tx.query(
-      `UPDATE books SET available = available + 1, updated_at = NOW() WHERE id = $1`,
-      [row.book_id],
+      `UPDATE loans
+       SET status = 'returned', returned_at = NOW(), returned_to = $1, updated_at = NOW()
+       WHERE id = $2`,
+      [user.id, id],
     )
 
-    const full = await tx.query(`${LOAN_SELECT} WHERE bb.id = $1`, [id])
+    // Free the physical copy
+    await tx.query(
+      `UPDATE book_copies SET status = 'available', updated_at = NOW() WHERE id = $1`,
+      [row.copy_id],
+    )
+
+    const full = await tx.query(`${LOAN_SELECT} WHERE l.id = $1 ${LOAN_GROUP}`, [id])
     return full.rows[0]
   })
 
   return mapBorrow(loan)!
 }
 
+// ---------------------------------------------------------------------------
+// renewLoan
+// ---------------------------------------------------------------------------
+
 export async function renewLoan(id: string, user: User) {
   const db = getDb()
-  const current = await db.query<{ user_id: string; status: string }>(
-    'SELECT * FROM borrowed_books WHERE id = $1',
+
+  const current = await db.query<{ member_id: string; status: string }>(
+    'SELECT member_id, status FROM loans WHERE id = $1',
     [id],
   )
   const row = current.rows[0]
   if (!row) throw new AppError('Loan not found', 404, 'NOT_FOUND')
-  if (user.role !== 'admin' && row.user_id !== user.id) {
-    throw new AppError('Not allowed', 403, 'FORBIDDEN')
+
+  if (user.role === 'member') {
+    const memberId = await getMemberId(user.id)
+    if (row.member_id !== memberId) throw new AppError('Not allowed', 403, 'FORBIDDEN')
   }
-  if (row.status !== 'borrowed' && row.status !== 'overdue') {
+  if (row.status !== 'active' && row.status !== 'overdue') {
     throw new AppError('Only active loans can be renewed', 400, 'VALIDATION')
   }
 
   const result = await db.query<{ id: string }>(
-    `UPDATE borrowed_books
-     SET due_date = GREATEST(due_date, CURRENT_DATE) + INTERVAL '14 days',
-         status = 'borrowed',
+    `UPDATE loans
+     SET due_at = GREATEST(due_at, NOW()) + INTERVAL '14 days',
+         status = 'active',
+         renewal_count = renewal_count + 1,
          updated_at = NOW()
      WHERE id = $1
      RETURNING id`,
     [id],
   )
 
-  const full = await db.query(`${LOAN_SELECT} WHERE bb.id = $1`, [result.rows[0].id])
+  // Record in loan_renewals
+  await db.query(
+    `INSERT INTO loan_renewals (id, loan_id, renewed_by, previous_due_at, new_due_at)
+     SELECT $1, $2, $3, due_at - INTERVAL '14 days', due_at
+     FROM loans WHERE id = $2`,
+    [newId(), result.rows[0].id, user.id],
+  )
+
+  const full = await db.query(`${LOAN_SELECT} WHERE l.id = $1 ${LOAN_GROUP}`, [result.rows[0].id])
   return mapBorrow(full.rows[0])!
 }

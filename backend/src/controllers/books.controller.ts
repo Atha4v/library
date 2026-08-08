@@ -23,11 +23,6 @@ export async function update(req: Request, res: Response) {
   return ok(res, data, 'Book updated')
 }
 
-export async function updateQuantity(req: Request, res: Response) {
-  const data = await booksService.updateQuantity(paramId(req), req.body)
-  return ok(res, data, 'Quantity updated')
-}
-
 export async function remove(req: Request, res: Response) {
   const data = await booksService.deleteBook(paramId(req))
   return ok(res, data, 'Book deleted')

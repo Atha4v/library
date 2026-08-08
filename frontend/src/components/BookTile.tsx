@@ -6,7 +6,7 @@ interface BookTileProps {
 }
 
 export default function BookTile({ book }: BookTileProps) {
-  const out = book.available <= 0
+  const out = book.availableCopies <= 0
 
   return (
     <Link to={`/books/${book.id}`} className="book-tile">
@@ -18,15 +18,15 @@ export default function BookTile({ book }: BookTileProps) {
       >
         <div>
           <div className="pill" style={{ background: 'rgba(255,255,255,0.18)', color: '#fff' }}>
-            {book.category}
+            {book.categories[0]?.name ?? 'General'}
           </div>
         </div>
       </div>
       <div className="book-meta">
         <h3>{book.title}</h3>
-        <p className="author">{book.author}</p>
+        <p className="author">{book.authors.map((a) => a.fullName).join(', ')}</p>
         <div className="meta-row">
-          <span>{out ? 'Waitlist' : `${book.available} available`}</span>
+          <span>{out ? 'Waitlist' : `${book.availableCopies} available`}</span>
           <span className={`pill ${out ? 'warn' : 'ok'}`}>
             {out ? 'Out' : 'In shelf'}
           </span>

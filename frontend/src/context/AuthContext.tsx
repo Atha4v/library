@@ -17,6 +17,7 @@ interface AuthContextValue {
   register: (payload: RegisterPayload) => Promise<AuthResult>
   logout: () => void
   isAdmin: boolean
+  isStaff: boolean
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -44,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string): Promise<AuthResult> => {
     try {
-      const res = await authApi.login(email, password)
+      const res = await authApi.login({ email, password })
       setToken(res.data.token)
       setUser(res.data.user)
       return { ok: true }
@@ -54,9 +55,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const register = useCallback(async ({ name, email, password }: RegisterPayload): Promise<AuthResult> => {
+  const register = useCallback(async ({ fullName, email, password }: RegisterPayload): Promise<AuthResult> => {
     try {
-      const res = await authApi.register({ name, email, password })
+      const res = await authApi.register({ fullName, email, password })
       setToken(res.data.token)
       setUser(res.data.user)
       return { ok: true }
@@ -79,6 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       logout,
       isAdmin: user?.role === 'admin',
+      isStaff: user?.role === 'admin' || user?.role === 'librarian',
     }),
     [user, loading, login, register, logout],
   )

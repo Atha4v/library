@@ -12,9 +12,9 @@ function formatDate(value?: string | null): string {
 export default function Dashboard() {
   const { user, loading: authLoading } = useAuth()
   const [loans, setLoans] = useState<Loan[]>([])
-  const [stats, setStats] = useState<MemberStats>({ activeLoans: 0, returned: 0 })
+  const [stats, setStats] = useState<MemberStats>({ activeLoans: 0, returned: 0, overdue: 0, role: 'member' })
   const [error, setError] = useState('')
-  const [busyId, setBusyId] = useState<number | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
 
   const load = async () => {
     try {
@@ -23,7 +23,7 @@ export default function Dashboard() {
         statsApi.me(),
       ])
       setLoans(loanRes.data || [])
-      setStats(statsRes.data || { activeLoans: 0, returned: 0 })
+      setStats(statsRes.data || { activeLoans: 0, returned: 0, overdue: 0, role: 'member' })
       setError('')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load loans')
@@ -37,7 +37,7 @@ export default function Dashboard() {
   if (authLoading) return <div className="container page-hero"><div className="empty">Loading…</div></div>
   if (!user) return <Navigate to="/login" replace />
 
-  const onReturn = async (id: number) => {
+  const onReturn = async (id: string) => {
     setBusyId(id)
     try {
       await borrowsApi.returnLoan(id)
@@ -49,7 +49,7 @@ export default function Dashboard() {
     }
   }
 
-  const onRenew = async (id: number) => {
+  const onRenew = async (id: string) => {
     setBusyId(id)
     try {
       await borrowsApi.renew(id)
@@ -64,7 +64,7 @@ export default function Dashboard() {
   return (
     <div className="container page-hero">
       <span className="eyebrow">Member desk</span>
-      <h1>Hi, {user.name.split(' ')[0]}</h1>
+      <h1>Hi, {user.fullName.split(' ')[0]}</h1>
       <p>Your current loans and recent returns.</p>
 
       <div className="stats">
@@ -114,23 +114,23 @@ export default function Dashboard() {
                       'Unknown title'
                     )}
                   </td>
-                  <td>{formatDate(loan.borrowDate)}</td>
-                  <td>{formatDate(loan.dueDate)}</td>
+                  <td>{formatDate(loan.borrowedAt as string)}</td>
+                  <td>{formatDate(loan.dueAt as string)}</td>
                   <td>
                     <span
                       className={`pill ${
-                        loan.status === 'borrowed'
+                        loan.status === 'active'
                           ? 'ok'
                           : loan.status === 'overdue'
                             ? 'warn'
                             : ''
                       }`}
                     >
-                      {loan.status}
+                      {loan.status === 'active' ? 'borrowed' : loan.status}
                     </span>
                   </td>
                   <td>
-                    {(loan.status === 'borrowed' || loan.status === 'overdue') && (
+                    {(loan.status === 'active' || loan.status === 'overdue') && (
                       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                         <button
                           type="button"

@@ -6,7 +6,7 @@ import type { RegisterPayload } from '../types'
 export default function Register() {
   const { register } = useAuth()
   const navigate = useNavigate()
-  const [form, setForm] = useState<RegisterPayload>({ name: '', email: '', password: '' })
+  const [form, setForm] = useState<RegisterPayload>({ fullName: '', email: '', password: '' })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -39,8 +39,8 @@ export default function Register() {
           Full name
           <input
             className="field"
-            name="name"
-            value={form.name}
+            name="fullName"
+            value={form.fullName}
             onChange={onChange}
             required
           />

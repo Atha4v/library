@@ -25,7 +25,7 @@ export default function Navbar() {
             </>
           ) : (
             <button type="button" className="linkish" onClick={logout}>
-              Sign out · {user.name.split(' ')[0]}
+              Sign out · {user.fullName.split(' ')[0]}
             </button>
           )}
         </nav>

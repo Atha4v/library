@@ -36,3 +36,11 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   }
   next()
 }
+
+/** Allows admin or librarian — for catalog/loan management endpoints */
+export function requireStaff(req: Request, res: Response, next: NextFunction) {
+  if (req.user?.role !== 'admin' && req.user?.role !== 'librarian') {
+    return fail(res, 403, 'Staff access required', 'FORBIDDEN')
+  }
+  next()
+}

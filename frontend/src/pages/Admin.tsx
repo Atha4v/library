@@ -2,22 +2,18 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useEffect, useState, type FormEvent } from 'react'
 import { booksApi, borrowsApi, statsApi } from '../api/client'
-import type { Book, Loan, OverviewStats } from '../types'
+import type { Book, BookCreatePayload, Loan, OverviewStats } from '../types'
 
-interface BookDraft {
-  title: string
-  author: string
-  isbn: string
-  category: string
-  quantity: number | string
-  description: string
+type BookDraft = Omit<BookCreatePayload, 'authors' | 'categories'> & {
+  authors: string
+  categories: string
 }
 
 const emptyDraft = (): BookDraft => ({
   title: '',
-  author: '',
-  isbn: '',
-  category: 'General',
+  authors: '',
+  isbn13: '',
+  categories: 'General',
   quantity: 1,
   description: '',
 })
@@ -35,7 +31,7 @@ export default function Admin() {
       const [booksRes, statsRes, loansRes] = await Promise.all([
         booksApi.list(),
         statsApi.overview(),
-        borrowsApi.all('borrowed'),
+        borrowsApi.all('active'),          // schema status 'active' (not 'borrowed')
       ])
       setInventory(booksRes.data.items || [])
       setStats(statsRes.data || {})
@@ -60,6 +56,9 @@ export default function Admin() {
       await booksApi.create({
         ...draft,
         quantity: Number(draft.quantity),
+        // pass as strings — backend parseList handles comma-separated
+        authors: draft.authors,
+        categories: draft.categories,
       })
       setDraft(emptyDraft())
       await load()
@@ -68,7 +67,7 @@ export default function Admin() {
     }
   }
 
-  const onDelete = async (id: number) => {
+  const onDelete = async (id: string) => {
     try {
       await booksApi.remove(id)
       await load()
@@ -117,31 +116,33 @@ export default function Admin() {
             />
           </label>
           <label>
-            Author
+            Author(s) <small style={{ opacity: 0.6 }}>(comma-separated)</small>
             <input
               className="field"
-              value={draft.author}
-              onChange={(e) => setDraft({ ...draft, author: e.target.value })}
+              value={draft.authors}
+              onChange={(e) => setDraft({ ...draft, authors: e.target.value })}
+              placeholder="e.g. Jane Austen, John Smith"
               required
             />
           </label>
           <label>
-            ISBN
+            ISBN-13
             <input
               className="field"
-              value={draft.isbn}
-              onChange={(e) => setDraft({ ...draft, isbn: e.target.value })}
+              value={draft.isbn13 ?? ''}
+              onChange={(e) => setDraft({ ...draft, isbn13: e.target.value })}
+              placeholder="978-..."
               required
             />
           </label>
           <label>
-            Quantity
+            Copies
             <input
               className="field"
               type="number"
               min="1"
               value={draft.quantity}
-              onChange={(e) => setDraft({ ...draft, quantity: e.target.value })}
+              onChange={(e) => setDraft({ ...draft, quantity: Number(e.target.value) })}
               required
             />
           </label>
@@ -149,7 +150,7 @@ export default function Admin() {
             Description
             <input
               className="field"
-              value={draft.description}
+              value={draft.description ?? ''}
               onChange={(e) => setDraft({ ...draft, description: e.target.value })}
             />
           </label>
@@ -166,9 +167,9 @@ export default function Admin() {
           <thead>
             <tr>
               <th>Title</th>
-              <th>Author</th>
-              <th>ISBN</th>
-              <th>Qty</th>
+              <th>Author(s)</th>
+              <th>ISBN-13</th>
+              <th>Total copies</th>
               <th>Available</th>
               <th />
             </tr>
@@ -177,10 +178,10 @@ export default function Admin() {
             {inventory.map((book) => (
               <tr key={book.id}>
                 <td>{book.title}</td>
-                <td>{book.author}</td>
-                <td>{book.isbn}</td>
-                <td>{book.quantity}</td>
-                <td>{book.available}</td>
+                <td>{book.authors.map((a) => a.fullName).join(', ')}</td>
+                <td>{book.isbn13 ?? book.isbn10 ?? '—'}</td>
+                <td>{book.totalCopies}</td>
+                <td>{book.availableCopies}</td>
                 <td>
                   <button
                     type="button"
@@ -217,10 +218,10 @@ export default function Admin() {
             ) : (
               loans.map((loan) => (
                 <tr key={loan.id}>
-                  <td>{loan.user?.name ?? '—'}</td>
+                  <td>{loan.member?.fullName ?? '—'}</td>
                   <td>{loan.book?.title ?? '—'}</td>
-                  <td>{String(loan.borrowDate).slice(0, 10)}</td>
-                  <td>{String(loan.dueDate).slice(0, 10)}</td>
+                  <td>{String(loan.borrowedAt).slice(0, 10)}</td>
+                  <td>{String(loan.dueAt).slice(0, 10)}</td>
                   <td><span className="pill ok">{loan.status}</span></td>
                 </tr>
               ))

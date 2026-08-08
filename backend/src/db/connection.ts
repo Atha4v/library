@@ -1,8 +1,7 @@
 import fs from 'fs'
 import path from 'path'
-import config from '../config'
-import { seedIfEmpty } from '../sql/seed'
-import type { DbClient, DbDriver, DbMode, QueryResult } from '../types'
+import config from '../config/index.js'
+import type { DbClient, DbDriver, DbMode, QueryResult } from '../types/index.js'
 
 let driver: DbDriver | null = null
 let mode: DbMode = 'pglite'
@@ -122,7 +121,6 @@ export async function connectDb(): Promise<{ mode: DbMode }> {
     const schemaPath = path.join(config.sqlDir, 'schema.sql')
     const schema = fs.readFileSync(schemaPath, 'utf8')
     await driver.exec(schema)
-    await seedIfEmpty(driver)
     console.log(`Using embedded PGlite at ${config.db.dataDir}`)
   }
 

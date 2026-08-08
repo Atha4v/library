@@ -3,22 +3,30 @@ import type { User } from '../types'
 
 export async function getOverview() {
   const db = getDb()
+
+  // Mark overdue loans first
   await db.query(
-    `UPDATE borrowed_books
+    `UPDATE loans
      SET status = 'overdue', updated_at = NOW()
-     WHERE status = 'borrowed' AND due_date < CURRENT_DATE`,
+     WHERE status = 'active' AND due_at < NOW()`,
   )
 
   const [books, members, active, overdue] = await Promise.all([
-    db.query<{ count: number }>('SELECT COUNT(*)::int AS count FROM books'),
+    // Total active books in catalog
     db.query<{ count: number }>(
-      `SELECT COUNT(*)::int AS count FROM users WHERE role = 'member'`,
+      `SELECT COUNT(*)::int AS count FROM books WHERE is_active = TRUE`,
     ),
+    // Total members (library profiles)
     db.query<{ count: number }>(
-      `SELECT COUNT(*)::int AS count FROM borrowed_books WHERE status IN ('borrowed', 'overdue')`,
+      `SELECT COUNT(*)::int AS count FROM members WHERE status = 'active'`,
     ),
+    // Active loans (active + overdue)
     db.query<{ count: number }>(
-      `SELECT COUNT(*)::int AS count FROM borrowed_books WHERE status = 'overdue'`,
+      `SELECT COUNT(*)::int AS count FROM loans WHERE status IN ('active', 'overdue')`,
+    ),
+    // Overdue loans
+    db.query<{ count: number }>(
+      `SELECT COUNT(*)::int AS count FROM loans WHERE status = 'overdue'`,
     ),
   ])
 
@@ -32,21 +40,32 @@ export async function getOverview() {
 
 export async function getMyStats(user: User) {
   const db = getDb()
+
+  // Resolve member_id from user_id
+  const memberResult = await db.query<{ id: string }>(
+    `SELECT id FROM members WHERE user_id = $1`,
+    [user.id],
+  )
+  const member = memberResult.rows[0]
+  if (!member) {
+    return { activeLoans: 0, returned: 0, overdue: 0, role: user.role }
+  }
+
   const [active, returned, overdue] = await Promise.all([
     db.query<{ count: number }>(
-      `SELECT COUNT(*)::int AS count FROM borrowed_books
-       WHERE user_id = $1 AND status IN ('borrowed', 'overdue')`,
-      [user.id],
+      `SELECT COUNT(*)::int AS count FROM loans
+       WHERE member_id = $1 AND status IN ('active', 'overdue')`,
+      [member.id],
     ),
     db.query<{ count: number }>(
-      `SELECT COUNT(*)::int AS count FROM borrowed_books
-       WHERE user_id = $1 AND status = 'returned'`,
-      [user.id],
+      `SELECT COUNT(*)::int AS count FROM loans
+       WHERE member_id = $1 AND status = 'returned'`,
+      [member.id],
     ),
     db.query<{ count: number }>(
-      `SELECT COUNT(*)::int AS count FROM borrowed_books
-       WHERE user_id = $1 AND status = 'overdue'`,
-      [user.id],
+      `SELECT COUNT(*)::int AS count FROM loans
+       WHERE member_id = $1 AND status = 'overdue'`,
+      [member.id],
     ),
   ])
 

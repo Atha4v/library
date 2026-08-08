@@ -1,34 +1,82 @@
-export type UserRole = 'member' | 'admin'
+// =============================================================================
+// Frontend types — aligned to schema.sql v2
+// =============================================================================
+
+export type UserRole = 'admin' | 'librarian' | 'member'
 
 export interface User {
-  id: number
-  name: string
+  id: string            // UUID
+  fullName: string      // schema: full_name
   email: string
-  role: UserRole
+  role: UserRole        // joined from roles.code
+  isActive?: boolean
+  emailVerified?: boolean
+}
+
+export interface Author {
+  id: string
+  fullName: string
+  authorOrder: number
+  contribution: string
+}
+
+export interface Category {
+  id: string
+  name: string
+  slug: string
 }
 
 export interface Book {
-  id: number
+  id: string            // UUID
   title: string
-  author: string
-  isbn: string
-  category: string
-  quantity: number
-  available: number
-  description?: string
+  subtitle?: string | null
+  isbn13?: string | null
+  isbn10?: string | null
+  publishedYear?: number | null
+  edition?: string | null
+  languageCode: string
+  pageCount?: number | null
+  description?: string | null
+  coverUrl?: string | null
   coverColor: string
+  isActive: boolean
+  authors: Author[]
+  categories: Category[]
+  // Derived from book_copies
+  totalCopies: number
+  availableCopies: number
+  onLoanCopies: number
+  reservedCopies: number
 }
 
-export type LoanStatus = 'borrowed' | 'returned' | 'overdue'
+/** 'active' = schema status for active loan (was 'borrowed' in old flat schema) */
+export type LoanStatus = 'active' | 'returned' | 'overdue' | 'lost'
 
 export interface Loan {
-  id: number
-  borrowDate: string
-  dueDate: string
-  returnDate?: string | null
+  id: string            // UUID
+  copyId: string
+  memberId: string
+  branchId: string
+  borrowedAt: string    // schema: borrowed_at
+  dueAt: string         // schema: due_at
+  returnedAt?: string | null   // schema: returned_at
+  renewalCount: number
   status: LoanStatus | string
-  book?: Pick<Book, 'id' | 'title' | 'author'> | null
-  user?: Pick<User, 'id' | 'name' | 'email'> | null
+  book?: {
+    id: string
+    title: string
+    authors: string[]   // comma-joined names
+    coverColor: string
+    isbn13?: string | null
+    isbn10?: string | null
+  } | null
+  member?: {
+    id: string
+    membershipNumber: string
+    userId: string
+    fullName: string
+    email: string
+  } | null
 }
 
 export interface ApiResponse<T = unknown> {
@@ -42,33 +90,55 @@ export interface AuthPayload {
   user: User
 }
 
+export interface CategoryMeta {
+  name: string
+  slug: string
+}
+
 export interface BookListData {
   items: Book[]
-  categories?: string[]
+  total: number
+  page: number
+  limit: number
+  categories?: CategoryMeta[]
 }
 
 export interface MemberStats {
   activeLoans: number
   returned: number
+  overdue: number
+  role: UserRole
 }
 
 export interface OverviewStats {
   books?: number
   members?: number
   activeLoans?: number
+  overdueLoans?: number
 }
 
 export interface BookCreatePayload {
   title: string
-  author: string
-  isbn: string
-  category?: string
-  quantity: number
+  authors: string | string[]  // comma-separated or array
+  isbn13?: string
+  isbn10?: string
+  categories?: string | string[]
+  quantity?: number
   description?: string
+  publishedYear?: number
+  edition?: string
+  languageCode?: string
+  coverColor?: string
+  coverUrl?: string
 }
 
 export interface RegisterPayload {
-  name: string
+  fullName: string      // schema: full_name
+  email: string
+  password: string
+}
+
+export interface LoginPayload {
   email: string
   password: string
 }

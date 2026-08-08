@@ -3,11 +3,20 @@ import { mapUser } from '../utils/mappers'
 import { AppError } from '../utils/errors'
 import type { UserRole } from '../types'
 
+const USER_SELECT = `
+  SELECT u.id, u.role_id, r.code AS role_code, u.email, u.full_name,
+         u.phone, u.is_active, u.email_verified, u.last_login_at,
+         u.created_at, u.updated_at
+  FROM users u
+  JOIN roles r ON r.id = u.role_id
+`
+
 export async function listUsers() {
   const db = getDb()
   const result = await db.query(
-    `SELECT id, name, email, role, created_at, updated_at
-     FROM users ORDER BY created_at DESC`,
+    `${USER_SELECT}
+     WHERE u.deleted_at IS NULL
+     ORDER BY u.created_at DESC`,
   )
   return result.rows.map((row) => mapUser(row)!).filter(Boolean)
 }
@@ -15,8 +24,7 @@ export async function listUsers() {
 export async function getUserById(id: string) {
   const db = getDb()
   const result = await db.query(
-    `SELECT id, name, email, role, created_at, updated_at
-     FROM users WHERE id = $1`,
+    `${USER_SELECT} WHERE u.id = $1 AND u.deleted_at IS NULL`,
     [id],
   )
   const user = mapUser(result.rows[0])
@@ -26,28 +34,40 @@ export async function getUserById(id: string) {
 
 export async function updateUser(
   id: string,
-  { name, role }: { name?: string; role?: UserRole },
+  { fullName, role }: { fullName?: string; role?: UserRole },
 ) {
-  if (!name && !role) {
+  if (!fullName && !role) {
     throw new AppError('Nothing to update', 400, 'VALIDATION')
   }
-  if (role && !['admin', 'member'].includes(role)) {
-    throw new AppError('Role must be admin or member', 400, 'VALIDATION')
+  if (role && !['admin', 'librarian', 'member'].includes(role)) {
+    throw new AppError('Role must be admin, librarian, or member', 400, 'VALIDATION')
   }
 
   const db = getDb()
+
+  // Resolve new role_id if role is changing
+  let roleId: string | null = null
+  if (role) {
+    const roleResult = await db.query<{ id: string }>(
+      `SELECT id FROM roles WHERE code = $1`,
+      [role],
+    )
+    if (!roleResult.rows[0]) throw new AppError(`Role '${role}' not found`, 400, 'VALIDATION')
+    roleId = roleResult.rows[0].id
+  }
+
   const result = await db.query(
     `UPDATE users
-     SET name = COALESCE($1, name),
-         role = COALESCE($2, role),
+     SET full_name  = COALESCE($1, full_name),
+         role_id    = COALESCE($2, role_id),
          updated_at = NOW()
-     WHERE id = $3
-     RETURNING id, name, email, role, created_at, updated_at`,
-    [name?.trim() || null, role || null, id],
+     WHERE id = $3 AND deleted_at IS NULL
+     RETURNING id`,
+    [fullName?.trim() || null, roleId, id],
   )
-  const user = mapUser(result.rows[0])
-  if (!user) throw new AppError('User not found', 404, 'NOT_FOUND')
-  return user
+  if (!result.rows[0]) throw new AppError('User not found', 404, 'NOT_FOUND')
+
+  return getUserById(id)
 }
 
 export async function deleteUser(id: string, currentUserId: string) {
@@ -55,7 +75,13 @@ export async function deleteUser(id: string, currentUserId: string) {
     throw new AppError('Cannot delete your own account', 400, 'VALIDATION')
   }
   const db = getDb()
-  const result = await db.query('DELETE FROM users WHERE id = $1 RETURNING id', [id])
+  // Soft delete — set deleted_at
+  const result = await db.query(
+    `UPDATE users SET deleted_at = NOW(), is_active = FALSE
+     WHERE id = $1 AND deleted_at IS NULL
+     RETURNING id`,
+    [id],
+  )
   if (!result.rows[0]) throw new AppError('User not found', 404, 'NOT_FOUND')
   return { id }
 }

@@ -83,7 +83,7 @@ export default function BookDetail() {
               color: '#fff',
             }}
           >
-            {book.category}
+            {book.categories.map((c) => c.name).join(', ') || 'Uncategorised'}
           </span>
           <h2 style={{ marginTop: 'auto', fontSize: '1.6rem' }}>{book.title}</h2>
         </div>
@@ -92,22 +92,22 @@ export default function BookDetail() {
           <span className="eyebrow">Title record</span>
           <h1>{book.title}</h1>
           <p style={{ fontSize: '1.05rem', marginBottom: '0.75rem' }}>
-            by <strong>{book.author}</strong>
+            by <strong>{book.authors.map((a) => a.fullName).join(', ')}</strong>
           </p>
           <p>{book.description}</p>
 
           <div className="stats" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
             <div className="stat">
               <span>ISBN</span>
-              <strong style={{ fontSize: '1rem' }}>{book.isbn}</strong>
+              <strong style={{ fontSize: '1rem' }}>{book.isbn13 ?? book.isbn10 ?? '—'}</strong>
             </div>
             <div className="stat">
               <span>Total copies</span>
-              <strong>{book.quantity}</strong>
+              <strong>{book.totalCopies}</strong>
             </div>
             <div className="stat">
               <span>Available</span>
-              <strong>{book.available}</strong>
+              <strong>{book.availableCopies}</strong>
             </div>
           </div>
 
@@ -116,9 +116,9 @@ export default function BookDetail() {
               type="button"
               className="btn btn-primary"
               onClick={handleBorrow}
-              disabled={busy || book.available <= 0}
+              disabled={busy || book.availableCopies <= 0}
             >
-              {book.available <= 0 ? 'Out of stock' : busy ? 'Borrowing…' : 'Borrow this copy'}
+              {book.availableCopies <= 0 ? 'Out of stock' : busy ? 'Borrowing…' : 'Borrow this copy'}
             </button>
             <Link to="/catalog" className="btn btn-ghost">
               Keep browsing
