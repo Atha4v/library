@@ -449,3 +449,128 @@ INSERT INTO library_settings (
 ) VALUES (
   NULL, 14, 5, 2, 5.00, 500.00, 'INR'
 );
+
+-- =============================================================================
+-- BOOK AVAILABILITY CACHE (denormalized for fast reads, trigger-maintained)
+-- =============================================================================
+
+CREATE TABLE book_availability_cache (
+  book_id            UUID PRIMARY KEY REFERENCES books(id) ON DELETE CASCADE,
+  total_copies       INTEGER NOT NULL DEFAULT 0,
+  available_copies   INTEGER NOT NULL DEFAULT 0,
+  on_loan_copies     INTEGER NOT NULL DEFAULT 0,
+  reserved_copies    INTEGER NOT NULL DEFAULT 0,
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_book_availability_cache_available 
+  ON book_availability_cache (available_copies) 
+  WHERE available_copies > 0;
+
+-- -----------------------------------------------------------------------------
+-- Trigger function: recalculate counts for a given book
+-- -----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION recalc_book_availability(p_book_id UUID)
+RETURNS void AS $$
+BEGIN
+  INSERT INTO book_availability_cache (book_id, total_copies, available_copies, on_loan_copies, reserved_copies, updated_at)
+  SELECT
+    p_book_id,
+    COUNT(*) FILTER (WHERE status <> 'retired'),
+    COUNT(*) FILTER (WHERE status = 'available'),
+    COUNT(*) FILTER (WHERE status = 'on_loan'),
+    COUNT(*) FILTER (WHERE status = 'reserved'),
+    NOW()
+  FROM book_copies
+  WHERE book_id = p_book_id
+  ON CONFLICT (book_id) DO UPDATE SET
+    total_copies = EXCLUDED.total_copies,
+    available_copies = EXCLUDED.available_copies,
+    on_loan_copies = EXCLUDED.on_loan_copies,
+    reserved_copies = EXCLUDED.reserved_copies,
+    updated_at = NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+-- -----------------------------------------------------------------------------
+-- Trigger: when book_copies changes (insert, update, delete)
+-- -----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION trg_book_copies_availability()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_book_id UUID;
+BEGIN
+  -- Determine which book was affected
+  IF TG_OP = 'DELETE' THEN
+    v_book_id := OLD.book_id;
+  ELSE
+    v_book_id := NEW.book_id;
+  END IF;
+
+  -- Also handle case where book_id changes during UPDATE
+  IF TG_OP = 'UPDATE' AND OLD.book_id IS DISTINCT FROM NEW.book_id THEN
+    PERFORM recalc_book_availability(OLD.book_id);
+    PERFORM recalc_book_availability(NEW.book_id);
+  ELSE
+    PERFORM recalc_book_availability(v_book_id);
+  END IF;
+
+  RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_book_copies_availability
+AFTER INSERT OR UPDATE OR DELETE ON book_copies
+FOR EACH ROW EXECUTE FUNCTION trg_book_copies_availability();
+
+-- -----------------------------------------------------------------------------
+-- Trigger: when loans status changes (active -> returned, etc.)
+-- A loan doesn't directly have book_id, so we join through book_copies
+-- -----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION trg_loans_availability()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_book_id UUID;
+BEGIN
+  -- Get the book_id from the copy
+  IF TG_OP = 'DELETE' THEN
+    SELECT book_id INTO v_book_id FROM book_copies WHERE id = OLD.copy_id;
+  ELSE
+    SELECT book_id INTO v_book_id FROM book_copies WHERE id = NEW.copy_id;
+  END IF;
+
+  IF v_book_id IS NOT NULL THEN
+    PERFORM recalc_book_availability(v_book_id);
+  END IF;
+
+  -- If copy_id changed (rare, but handle it)
+  IF TG_OP = 'UPDATE' AND OLD.copy_id IS DISTINCT FROM NEW.copy_id THEN
+    SELECT book_id INTO v_book_id FROM book_copies WHERE id = OLD.copy_id;
+    IF v_book_id IS NOT NULL THEN
+      PERFORM recalc_book_availability(v_book_id);
+    END IF;
+  END IF;
+
+  RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_loans_availability
+AFTER INSERT OR UPDATE OF status, copy_id ON loans
+FOR EACH ROW EXECUTE FUNCTION trg_loans_availability();
+
+-- -----------------------------------------------------------------------------
+-- Seed: initialize cache for all existing books
+-- -----------------------------------------------------------------------------
+INSERT INTO book_availability_cache (book_id, total_copies, available_copies, on_loan_copies, reserved_copies, updated_at)
+SELECT
+  b.id,
+  COUNT(c.id) FILTER (WHERE c.status <> 'retired'),
+  COUNT(c.id) FILTER (WHERE c.status = 'available'),
+  COUNT(c.id) FILTER (WHERE c.status = 'on_loan'),
+  COUNT(c.id) FILTER (WHERE c.status = 'reserved'),
+  NOW()
+FROM books b
+LEFT JOIN book_copies c ON c.book_id = b.id
+GROUP BY b.id
+ON CONFLICT (book_id) DO NOTHING;
