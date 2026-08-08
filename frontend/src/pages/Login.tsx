@@ -7,6 +7,7 @@ export default function Login() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('priya@shelfmark.local')
   const [password, setPassword] = useState('member123')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -45,13 +46,35 @@ export default function Login() {
         </label>
         <label>
           Password
-          <input
-            className="field"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+          <div className="password-field" style={{ position: 'relative' }}>
+            <input
+              className="field"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              style={{ paddingRight: '3rem' }}
+            />
+            <button
+              type="button"
+              className="toggle-password"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              style={{
+                position: 'absolute',
+                right: '0.5rem',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                color: '#666',
+              }}
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
         </label>
         {error && <p className="error">{error}</p>}
         <button type="submit" className="btn btn-primary" disabled={busy}>
