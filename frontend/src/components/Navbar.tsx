@@ -1,8 +1,14 @@
-import { NavLink, Link } from 'react-router-dom'
+import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function Navbar() {
   const { user, logout, isAdmin } = useAuth()
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    logout()
+    navigate('/')
+  }
 
   return (
     <header className="site-header">
@@ -24,7 +30,7 @@ export default function Navbar() {
               </Link>
             </>
           ) : (
-            <button type="button" className="linkish" onClick={logout}>
+            <button type="button" className="linkish" onClick={handleLogout}>
               Sign out · {user.fullName.split(' ')[0]}
             </button>
           )}

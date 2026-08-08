@@ -15,7 +15,7 @@ const config = {
     databaseUrl: (process.env.DATABASE_URL || '').trim(),
     dataDir: path.join(__dirname, '..', '..', 'data'),
   },
-  sqlDir: path.join(__dirname, '..', 'sql'),
+  sqlDir: path.join(__dirname, '..', '..', '..', 'database'),
 }
 
 export default config

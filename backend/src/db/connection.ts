@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
-import config from '../config/index.js'
-import type { DbClient, DbDriver, DbMode, QueryResult } from '../types/index.js'
+import config from '../config'
+import type { DbClient, DbDriver, DbMode, QueryResult } from '../types'
 
 let driver: DbDriver | null = null
 let mode: DbMode = 'pglite'

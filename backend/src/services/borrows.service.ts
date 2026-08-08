@@ -80,8 +80,9 @@ export async function borrowBook(userId: string, bookId?: string) {
     const copyRes = await tx.query<{ id: string; branch_id: string }>(
       `SELECT id, branch_id FROM book_copies
        WHERE book_id = $1 AND status = 'available'
+       ORDER BY id
        LIMIT 1
-       FOR UPDATE SKIP LOCKED`,
+       FOR UPDATE`,
       [bookId],
     )
     const copy = copyRes.rows[0]
