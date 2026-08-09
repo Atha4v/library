@@ -1,0 +1,81 @@
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'IMAGE_NAME', defaultValue: 'shelfmark-frontend', description: 'Docker image name')
+        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Docker image tag')
+        string(name: 'REGISTRY', defaultValue: '', description: 'Optional registry prefix (e.g. docker.io/myorg)')
+        string(name: 'API_URL', defaultValue: '/api', description: 'VITE_API_URL passed at build time')
+        booleanParam(name: 'PUSH_IMAGE', defaultValue: false, description: 'Push image to registry after build')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Lint') {
+            steps {
+                dir('frontend') {
+                    sh 'npm ci'
+                    sh 'npm run lint'
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    env.REGISTRY_PREFIX = params.REGISTRY?.trim() ?: ''
+                    env.BUILT_IMAGE = env.REGISTRY_PREFIX
+                        ? "${env.REGISTRY_PREFIX}/${params.IMAGE_NAME}:${params.IMAGE_TAG}"
+                        : "${params.IMAGE_NAME}:${params.IMAGE_TAG}"
+
+                    sh """
+                        chmod +x frontend/docker-build.sh
+                        IMAGE_NAME=${params.IMAGE_NAME} \\
+                        IMAGE_TAG=${params.IMAGE_TAG} \\
+                        REGISTRY=${env.REGISTRY_PREFIX} \\
+                        VITE_API_URL=${params.API_URL} \\
+                        ./frontend/docker-build.sh
+                    """
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            when {
+                allOf {
+                    expression { params.PUSH_IMAGE }
+                    expression { params.REGISTRY?.trim() }
+                }
+            }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-registry-credentials',
+                    usernameVariable: 'REGISTRY_USER',
+                    passwordVariable: 'REGISTRY_PASS'
+                )]) {
+                    sh """
+                        echo "\$REGISTRY_PASS" | docker login ${params.REGISTRY} -u "\$REGISTRY_USER" --password-stdin
+                        docker push ${env.BUILT_IMAGE}
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Frontend pipeline completed. Image: ${env.BUILT_IMAGE}"
+        }
+        failure {
+            echo 'Frontend pipeline failed.'
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
