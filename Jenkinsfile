@@ -26,5 +26,21 @@ pipeline {
                 sh 'docker compose build'
             }
         }
+
+        stage('Application Checks') {
+            steps {
+                sh '''
+                    cd backend
+                    npm install
+                    npm run typecheck
+                    npm run build
+
+                    cd ../frontend
+                    npm ci
+                    npm run lint
+                    npm run build
+                '''
+            }
+        }
     }
 }
