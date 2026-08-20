@@ -1,5 +1,4 @@
-pipeline 
-{
+pipeline {
     agent any
 
     stages {
@@ -21,12 +20,11 @@ pipeline
                 sh 'test -f frontend/Dockerfile'
             }
         }
-    }
-        
-    stage('Build Docker Images') 
-    {
-        steps {
-            sh 'docker compose build'
+
+        stage('Build Docker Images') {
+            steps {
+                sh 'docker compose build'
+            }
         }
     }
 }
