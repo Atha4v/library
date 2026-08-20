@@ -10,9 +10,14 @@ pipeline {
             }
         }
 
-        stage('Checkout') {
+        stage('Verify Repository') {
             steps {
-                checkout scm
+                sh 'pwd'
+                sh 'git branch --show-current'
+                sh 'ls -la'
+                sh 'test -f docker-compose.yml'
+                sh 'test -f backend/Dockerfile'
+                sh 'test -f frontend/Dockerfile'
             }
         }
     }
